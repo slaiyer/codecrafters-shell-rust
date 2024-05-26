@@ -16,16 +16,30 @@ fn repl_start() {
     loop {
         prompt_print(&mut stdout);
         let input = input_read(&stdin);
-        if let Err(e) = command_parse(&input) {
-            println!("{e}")
+        match command_parse(&input) {
+            Ok(output) => println!("{output}"),
+            Err(e) => println!("{e}"),
         }
     }
 }
 
 fn command_parse(input: &str) -> Result<String, String> {
-    match input {
-        "exit 0" => process::exit(0),
-        _ => Err(format!("{input}: command not found")),
+    let mut input_token_iter = input.split_whitespace();
+    match input_token_iter.next() {
+        Some("exit") => match input_token_iter.next() {
+            Some(arg_str) => match arg_str.parse::<i32>() {
+                Ok(code) => process::exit(code),
+                _ => process::exit(1),
+            },
+            _ => process::exit(0),
+        },
+        Some(cmd @ "echo") => Ok(input
+            .chars()
+            .skip(cmd.len())
+            .skip_while(|c| c.is_whitespace())
+            .collect()),
+        Some(cmd) => Err(format!("{cmd}: command not found")),
+        _ => Ok(String::new()),
     }
 }
 
