@@ -1,5 +1,6 @@
 #[allow(unused_imports)]
 use std::io::{self, Write};
+use std::process;
 
 fn main() {
     // You can use print statements as follows for debugging, they'll be visible when running tests.
@@ -22,7 +23,10 @@ fn repl_start() {
 }
 
 fn command_parse(input: &str) -> Result<String, String> {
-    Err(format!("{input}: command not found"))
+    match input {
+        "exit 0" => process::exit(0),
+        _ => Err(format!("{input}: command not found")),
+    }
 }
 
 fn input_read(stdin: &io::Stdin) -> String {
