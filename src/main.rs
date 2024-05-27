@@ -10,16 +10,9 @@ use strum::{AsRefStr, EnumString};
 use thiserror::Error;
 
 fn main() {
-    // You can use print statements as follows for debugging, they'll be visible when running tests.
-    // println!("Logs from your program will appear here!");
-
-    repl_start();
-}
-
-fn repl_start() {
     let paths = env::split_paths(&env::var("PATH").unwrap())
         .map(PathBuf::from)
-        .collect::<Vec<PathBuf>>();
+        .collect::<Vec<_>>();
 
     let stdin = io::stdin();
     let mut stdout = io::stdout();
@@ -46,7 +39,10 @@ fn repl_start() {
                 Ok(command) => command.execute(&paths),
                 Err(e) => eprintln!("{e}"),
             },
-            Err(_) => eprintln!("{cmd}: command not found"),
+            Err(_) => match executable_find(cmd, &paths) {
+                Some(cmd) => executable_invoke(cmd, &args),
+                _ => eprintln!("{cmd}: command not found"),
+            },
         }
     }
 }
@@ -70,7 +66,7 @@ impl Command {
         let tokens = args
             .split_ascii_whitespace()
             .map(str::to_string)
-            .collect::<Vec<String>>();
+            .collect::<Vec<_>>();
         match self {
             Self::Exit { .. } => match tokens.len() {
                 n if n > 1 => Err(CommandError::Argument("too many supplied".to_owned())),
@@ -97,7 +93,7 @@ impl Command {
                 for t in tokens {
                     match t.parse::<Command>() {
                         Ok(t) => println!("{} is a shell builtin", t.as_ref()),
-                        Err(_) => match find_executable_in_dirs(paths, &t) {
+                        Err(_) => match executable_find(&t, paths) {
                             Some(cmd) => println!("{t} is {}", cmd.display()),
                             _ => eprintln!("{t} not found"),
                         },
@@ -108,7 +104,21 @@ impl Command {
     }
 }
 
-fn find_executable_in_dirs(dirs: &[PathBuf], filename: &str) -> Option<PathBuf> {
+fn executable_invoke(cmd: PathBuf, args: &str) {
+    let args = shell_words::split(args).expect("failed to parse arguments");
+
+    let output = process::Command::new(cmd)
+        .args(args)
+        .stdout(process::Stdio::piped())
+        .stderr(process::Stdio::piped())
+        .output()
+        .unwrap();
+
+    io::stdout().write_all(&output.stdout).unwrap();
+    io::stderr().write_all(&output.stderr).unwrap();
+}
+
+fn executable_find(filename: &str, dirs: &[PathBuf]) -> Option<PathBuf> {
     dirs.iter().find_map(|dir| {
         dir.read_dir()
             .ok()?
