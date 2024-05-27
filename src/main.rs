@@ -1,6 +1,11 @@
 #[allow(unused_imports)]
-use std::io::{self, Write};
+use std::env;
 use std::process;
+use std::{fs, os::unix::fs::PermissionsExt, path::Path};
+use std::{
+    io::{self, Write},
+    path::PathBuf,
+};
 use strum::{AsRefStr, EnumString};
 use thiserror::Error;
 
@@ -12,21 +17,23 @@ fn main() {
 }
 
 fn repl_start() {
+    let paths = env::split_paths(&env::var("PATH").unwrap())
+        .map(PathBuf::from)
+        .collect::<Vec<PathBuf>>();
+
     let stdin = io::stdin();
     let mut stdout = io::stdout();
     let mut stderr = io::stderr();
 
     loop {
+        stderr.flush().unwrap();
         print!("$ ");
         stdout.flush().unwrap();
-        stderr.flush().unwrap();
+
         let input = input_read(&stdin);
         let cmd = match input.split_ascii_whitespace().next() {
             Some(cmd) => cmd,
-            _ => {
-                println!();
-                continue;
-            }
+            _ => continue,
         };
         let args = input
             .chars()
@@ -36,7 +43,7 @@ fn repl_start() {
             .to_owned();
         match cmd.parse::<Command>() {
             Ok(command) => match command.build(&args) {
-                Ok(command) => command.execute(),
+                Ok(command) => command.execute(&paths),
                 Err(e) => eprintln!("{e}"),
             },
             Err(_) => eprintln!("{cmd}: command not found"),
@@ -82,7 +89,7 @@ impl Command {
         }
     }
 
-    fn execute(self) {
+    fn execute(self, paths: &[PathBuf]) {
         match self {
             Self::Exit { code } => process::exit(code),
             Self::Echo { message } => println!("{message}"),
@@ -90,12 +97,47 @@ impl Command {
                 for t in tokens {
                     match t.parse::<Command>() {
                         Ok(t) => println!("{} is a shell builtin", t.as_ref()),
-                        Err(_) => println!("{t} not found"),
+                        Err(_) => match find_executable_in_dirs(paths, &t) {
+                            Some(cmd) => println!("{t} is {}", cmd.display()),
+                            _ => eprintln!("{t} not found"),
+                        },
                     }
                 }
             }
         }
     }
+}
+
+fn find_executable_in_dirs(dirs: &[PathBuf], filename: &str) -> Option<PathBuf> {
+    dirs.iter().find_map(|dir| {
+        dir.read_dir()
+            .ok()?
+            .filter_map(Result::ok)
+            .find_map(|entry| {
+                let path = entry.path();
+                if path.file_name()? == filename && path.is_file() && is_executable(&path) {
+                    return Some(path);
+                }
+                None
+            })
+    })
+}
+
+fn is_executable<P: AsRef<Path>>(path: P) -> bool {
+    #[cfg(unix)]
+    {
+        if let Ok(metadata) = fs::metadata(&path) {
+            return metadata.permissions().mode() & 0o111 != 0;
+        }
+    }
+
+    #[cfg(windows)]
+    {
+        if let Ok(metadata) = fs::metadata(&path) {
+            return metadata.is_file(); // On Windows, executability check is simplified
+        }
+    }
+    false
 }
 
 fn input_read(stdin: &io::Stdin) -> String {
