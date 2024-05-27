@@ -94,7 +94,15 @@ impl Command {
                     match t.parse::<Command>() {
                         Ok(t) => println!("{} is a shell builtin", t.as_ref()),
                         Err(_) => match executable_find(&t, paths) {
-                            Some(cmd) => println!("{t} is {}", cmd.display()),
+                            Some(cmd) => {
+                                println!(
+                                    "{t} is {}",
+                                    match cmd.canonicalize() {
+                                        Ok(path) => path.display().to_string(),
+                                        _ => cmd.to_string_lossy().into_owned(),
+                                    }
+                                )
+                            }
                             _ => eprintln!("{t} not found"),
                         },
                     }
