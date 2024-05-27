@@ -10,9 +10,18 @@ use strum::{AsRefStr, EnumString};
 use thiserror::Error;
 
 fn main() {
-    let paths = env::split_paths(&env::var("PATH").unwrap())
-        .map(PathBuf::from)
-        .collect::<Vec<_>>();
+    const PATH: &str = "PATH";
+    let paths = env::split_paths(
+        &(match env::var(PATH) {
+            Ok(paths) => paths,
+            Err(_) => {
+                eprintln!("failed to parse environment variable: {PATH}");
+                "".to_owned()
+            }
+        }),
+    )
+    .map(PathBuf::from)
+    .collect::<Vec<_>>();
 
     let stdin = io::stdin();
     let mut stdout = io::stdout();
@@ -68,16 +77,7 @@ impl Command {
             .map(str::to_string)
             .collect::<Vec<_>>();
         match self {
-            Self::Exit { .. } => match tokens.len() {
-                n if n > 1 => Err(CommandError::Argument("too many supplied".to_owned())),
-                1 => Ok(Self::Exit {
-                    code: match tokens[0].parse::<i32>() {
-                        Ok(code) => code,
-                        _ => 1,
-                    },
-                }),
-                _ => Ok(Self::Exit { code: 0 }),
-            },
+            Self::Exit { .. } => build_command_exit(tokens),
             Self::Echo { .. } => Ok(Self::Echo {
                 message: args.to_owned(),
             }),
@@ -89,31 +89,48 @@ impl Command {
         match self {
             Self::Exit { code } => process::exit(code),
             Self::Echo { message } => println!("{message}"),
-            Self::Type { tokens } => {
-                for t in tokens {
-                    match t.parse::<Command>() {
-                        Ok(t) => println!("{} is a shell builtin", t.as_ref()),
-                        Err(_) => match executable_find(&t, paths) {
-                            Some(cmd) => {
-                                println!(
-                                    "{t} is {}",
-                                    match cmd.canonicalize() {
-                                        Ok(path) => path.display().to_string(),
-                                        _ => cmd.to_string_lossy().into_owned(),
-                                    }
-                                )
-                            }
-                            _ => eprintln!("{t} not found"),
-                        },
-                    }
-                }
-            }
+            Self::Type { tokens } => get_command_types(tokens, paths),
         }
     }
 }
 
+fn build_command_exit(tokens: Vec<String>) -> Result<Command, CommandError> {
+    match tokens.len() {
+        n if n > 1 => Err(CommandError::Argument("too many supplied".to_owned())),
+        1 => Ok(Command::Exit {
+            code: match tokens[0].parse::<i32>() {
+                Ok(code) => code,
+                _ => 1,
+            },
+        }),
+        _ => Ok(Command::Exit { code: 0 }),
+    }
+}
+
+fn get_command_types(tokens: Vec<String>, paths: &[PathBuf]) {
+    tokens.into_iter().for_each(|t| match t.parse::<Command>() {
+        Ok(t) => println!("{} is a shell builtin", t.as_ref()),
+        Err(_) => match executable_find(&t, paths) {
+            Some(cmd) => println!(
+                "{t} is {}",
+                match cmd.canonicalize() {
+                    Ok(path) => path.display().to_string(),
+                    _ => cmd.to_string_lossy().into_owned(),
+                }
+            ),
+            _ => eprintln!("{t} not found"),
+        },
+    })
+}
+
 fn executable_invoke(cmd: PathBuf, args: &str) {
-    let args = shell_words::split(args).expect("failed to parse arguments");
+    let args = match shell_words::split(args) {
+        Ok(args) => args,
+        Err(e) => {
+            eprintln!("failed to parse arguments: {e}");
+            return;
+        }
+    };
 
     let output = process::Command::new(cmd)
         .args(args)
