@@ -119,6 +119,11 @@ fn executable_invoke(cmd: PathBuf, args: &str) {
 }
 
 fn executable_find(filename: &str, dirs: &[PathBuf]) -> Option<PathBuf> {
+    let path = Path::new(filename);
+    if path.is_file() && is_executable(path) {
+        return Some(path.to_path_buf());
+    }
+
     dirs.iter().find_map(|dir| {
         dir.read_dir()
             .ok()?
