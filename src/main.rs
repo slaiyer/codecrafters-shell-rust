@@ -12,15 +12,22 @@ use strum::{AsRefStr, EnumString};
 use thiserror::Error;
 
 fn main() -> rustyline::Result<()> {
+    let paths = get_env_paths();
+    repl(&paths)
+}
+
+fn get_env_paths() -> Vec<PathBuf> {
     const PATH: &str = "PATH";
-    let paths = match env::var(PATH) {
+    match env::var(PATH) {
         Ok(ref paths) => env::split_paths(paths).collect(),
         Err(_) => {
             eprintln!("failed to parse environment variable: {PATH}");
             vec![]
         }
-    };
+    }
+}
 
+fn repl(paths: &[PathBuf]) -> rustyline::Result<()> {
     let mut rl = DefaultEditor::new()?;
     let mut stdout = io::stdout();
     let mut stderr = io::stderr();
@@ -31,12 +38,12 @@ fn main() -> rustyline::Result<()> {
         stdout.flush().unwrap();
 
         match readline {
-            Ok(line) => {
+            Ok(ref line) => {
                 let cmd = match line.split_ascii_whitespace().next() {
                     Some(cmd) => cmd,
                     _ => continue,
                 };
-                handle_input(&line, cmd, &paths, &mut stdout, &mut stderr);
+                handle_input(line, cmd, paths, &mut stdout, &mut stderr);
             }
             Err(ReadlineError::Interrupted) => {
                 eprintln!("^C");
