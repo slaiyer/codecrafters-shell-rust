@@ -1,12 +1,12 @@
 #[allow(unused_imports)]
 use rustyline::error::ReadlineError;
 use rustyline::DefaultEditor;
-use std::{env, io::Stdout};
-use std::{fs, os::unix::fs::PermissionsExt, path::Path};
-use std::{io::Stderr, process};
 use std::{
-    io::{self, Write},
-    path::PathBuf,
+    env, fs,
+    io::{self, Stderr, Stdout, Write},
+    os::unix::fs::PermissionsExt,
+    path::{Path, PathBuf},
+    process,
 };
 use strum::{AsRefStr, EnumString};
 use thiserror::Error;
