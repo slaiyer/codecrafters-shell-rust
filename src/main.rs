@@ -1,4 +1,4 @@
-#![warn(clippy::all, clippy::pedantic, future_incompatible)]
+#![warn(clippy::all, clippy::pedantic, clippy::nursery, future_incompatible)]
 
 use rustyline::{error::ReadlineError, DefaultEditor};
 use std::{
@@ -18,12 +18,13 @@ fn main() -> rustyline::Result<()> {
 
 fn get_env_paths() -> Vec<PathBuf> {
     const PATH: &str = "PATH";
-    if let Ok(ref paths) = env::var(PATH) {
-        env::split_paths(paths).collect()
-    } else {
-        eprintln!("failed to parse environment variable: {PATH}");
-        vec![]
-    }
+    env::var(PATH).as_ref().map_or_else(
+        |_| {
+            eprintln!("failed to parse environment variable: {PATH}");
+            vec![]
+        },
+        |paths| env::split_paths(paths).collect(),
+    )
 }
 
 fn repl(paths: &[PathBuf]) -> rustyline::Result<()> {
@@ -129,10 +130,7 @@ fn build_command_exit(tokens: &[String]) -> Result<Command, CommandError> {
     match tokens.len() {
         n if n > 1 => Err(CommandError::Argument("too many supplied".to_owned())),
         1 => Ok(Command::Exit {
-            code: match tokens[0].parse::<i32>() {
-                Ok(code) => code,
-                _ => 1,
-            },
+            code: tokens[0].parse::<i32>().map_or(1, |code| code),
         }),
         _ => Ok(Command::Exit { code: 0 }),
     }
@@ -144,10 +142,10 @@ fn get_command_types(tokens: Vec<String>, paths: &[PathBuf]) {
         Err(_) => match executable_find(&t, paths) {
             Some(cmd) => println!(
                 "{t} is {}",
-                match cmd.canonicalize() {
-                    Ok(path) => path.display().to_string(),
-                    _ => cmd.to_string_lossy().into_owned(),
-                }
+                cmd.canonicalize().map_or_else(
+                    |_| cmd.to_string_lossy().into_owned(),
+                    |path| path.display().to_string()
+                )
             ),
             _ => eprintln!("{t} not found"),
         },
