@@ -210,5 +210,6 @@ fn is_executable<P: AsRef<Path>>(path: P) -> bool {
             return metadata.is_file(); // TODO: consider https://docs.rs/is_executable/latest/src/is_executable/lib.rs.html#146
         }
     }
+
     false
 }
