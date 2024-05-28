@@ -13,17 +13,13 @@ use thiserror::Error;
 
 fn main() -> rustyline::Result<()> {
     const PATH: &str = "PATH";
-    let paths = env::split_paths(
-        &(match env::var(PATH) {
-            Ok(paths) => paths,
-            Err(_) => {
-                eprintln!("failed to parse environment variable: {PATH}");
-                "".to_owned()
-            }
-        }),
-    )
-    .map(PathBuf::from)
-    .collect::<Vec<_>>();
+    let paths = match env::var(PATH) {
+        Ok(ref paths) => env::split_paths(paths).collect::<Vec<_>>(),
+        Err(_) => {
+            eprintln!("failed to parse environment variable: {PATH}");
+            Vec::<PathBuf>::new()
+        }
+    };
 
     let mut rl = DefaultEditor::new()?;
     let mut stdout = io::stdout();
