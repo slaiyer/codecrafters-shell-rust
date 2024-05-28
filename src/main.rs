@@ -1,6 +1,6 @@
-#[allow(unused_imports)]
-use rustyline::error::ReadlineError;
-use rustyline::DefaultEditor;
+#![warn(clippy::all, clippy::pedantic, future_incompatible)]
+
+use rustyline::{error::ReadlineError, DefaultEditor};
 use std::{
     env, fs,
     io::{self, Stderr, Stdout, Write},
@@ -18,12 +18,11 @@ fn main() -> rustyline::Result<()> {
 
 fn get_env_paths() -> Vec<PathBuf> {
     const PATH: &str = "PATH";
-    match env::var(PATH) {
-        Ok(ref paths) => env::split_paths(paths).collect(),
-        Err(_) => {
-            eprintln!("failed to parse environment variable: {PATH}");
-            vec![]
-        }
+    if let Ok(ref paths) = env::var(PATH) {
+        env::split_paths(paths).collect()
+    } else {
+        eprintln!("failed to parse environment variable: {PATH}");
+        vec![]
     }
 }
 
@@ -39,9 +38,8 @@ fn repl(paths: &[PathBuf]) -> rustyline::Result<()> {
 
         match readline {
             Ok(ref line) => {
-                let cmd = match line.split_ascii_whitespace().next() {
-                    Some(cmd) => cmd,
-                    _ => continue,
+                let Some(cmd) = line.split_ascii_whitespace().next() else {
+                    continue;
                 };
                 handle_input(line, cmd, paths, &mut stdout, &mut stderr);
             }
@@ -54,7 +52,7 @@ fn repl(paths: &[PathBuf]) -> rustyline::Result<()> {
                 break;
             }
             Err(err) => {
-                eprintln!("error: {:?}", err);
+                eprintln!("error: {err:?}");
                 break;
             }
         }
@@ -110,7 +108,7 @@ impl Command {
             .map(str::to_string)
             .collect::<Vec<_>>();
         match self {
-            Self::Exit { .. } => build_command_exit(tokens),
+            Self::Exit { .. } => build_command_exit(&tokens),
             Self::Echo { .. } => Ok(Self::Echo {
                 message: args.to_owned(),
             }),
@@ -127,7 +125,7 @@ impl Command {
     }
 }
 
-fn build_command_exit(tokens: Vec<String>) -> Result<Command, CommandError> {
+fn build_command_exit(tokens: &[String]) -> Result<Command, CommandError> {
     match tokens.len() {
         n if n > 1 => Err(CommandError::Argument("too many supplied".to_owned())),
         1 => Ok(Command::Exit {
@@ -153,7 +151,7 @@ fn get_command_types(tokens: Vec<String>, paths: &[PathBuf]) {
             ),
             _ => eprintln!("{t} not found"),
         },
-    })
+    });
 }
 
 fn executable_invoke(cmd: PathBuf, args: &str, stdout: &mut Stdout, stderr: &mut Stderr) {
