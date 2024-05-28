@@ -14,10 +14,10 @@ use thiserror::Error;
 fn main() -> rustyline::Result<()> {
     const PATH: &str = "PATH";
     let paths = match env::var(PATH) {
-        Ok(ref paths) => env::split_paths(paths).collect::<Vec<_>>(),
+        Ok(ref paths) => env::split_paths(paths).collect(),
         Err(_) => {
             eprintln!("failed to parse environment variable: {PATH}");
-            Vec::<PathBuf>::new()
+            vec![]
         }
     };
 
