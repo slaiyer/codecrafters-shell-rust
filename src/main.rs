@@ -33,11 +33,10 @@ fn repl(paths: &[PathBuf]) -> rustyline::Result<()> {
     let mut stderr = io::stderr();
 
     loop {
-        stderr.flush().unwrap();
-        let readline = rl.readline("$ ");
         stdout.flush().unwrap();
+        stderr.flush().unwrap();
 
-        match readline {
+        match rl.readline("$ ") {
             Ok(ref line) => {
                 let Some(cmd) = line.split_ascii_whitespace().next() else {
                     continue;
