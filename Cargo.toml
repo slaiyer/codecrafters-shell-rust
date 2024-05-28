@@ -16,4 +16,4 @@ panic = "abort"
 rustyline = "14.0.0"
 shell-words = "1.1.0"
 strum = { version = "0.26.2", features = ["std", "derive", "strum_macros"] }
-thiserror = "1.0.38"
+thiserror = "1.0.61"
