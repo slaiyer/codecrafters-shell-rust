@@ -1,7 +1,9 @@
 #[allow(unused_imports)]
-use std::env;
-use std::process;
+use rustyline::error::ReadlineError;
+use rustyline::DefaultEditor;
+use std::{env, io::Stdout};
 use std::{fs, os::unix::fs::PermissionsExt, path::Path};
+use std::{io::Stderr, process};
 use std::{
     io::{self, Write},
     path::PathBuf,
@@ -9,7 +11,7 @@ use std::{
 use strum::{AsRefStr, EnumString};
 use thiserror::Error;
 
-fn main() {
+fn main() -> rustyline::Result<()> {
     const PATH: &str = "PATH";
     let paths = env::split_paths(
         &(match env::var(PATH) {
@@ -23,36 +25,64 @@ fn main() {
     .map(PathBuf::from)
     .collect::<Vec<_>>();
 
-    let stdin = io::stdin();
+    let mut rl = DefaultEditor::new()?;
     let mut stdout = io::stdout();
     let mut stderr = io::stderr();
 
     loop {
         stderr.flush().unwrap();
-        print!("$ ");
+        let readline = rl.readline("$ ");
         stdout.flush().unwrap();
 
-        let input = input_read(&stdin);
-        let cmd = match input.split_ascii_whitespace().next() {
-            Some(cmd) => cmd,
-            _ => continue,
-        };
-        let args = input
-            .chars()
-            .skip(cmd.len())
-            .collect::<String>()
-            .trim()
-            .to_owned();
-        match cmd.parse::<Command>() {
-            Ok(command) => match command.build(&args) {
-                Ok(command) => command.execute(&paths),
-                Err(e) => eprintln!("{e}"),
-            },
-            Err(_) => match executable_find(cmd, &paths) {
-                Some(cmd) => executable_invoke(cmd, &args),
-                _ => eprintln!("{cmd}: command not found"),
-            },
+        match readline {
+            Ok(line) => {
+                let cmd = match line.split_ascii_whitespace().next() {
+                    Some(cmd) => cmd,
+                    _ => continue,
+                };
+                handle_input(&line, cmd, &paths, &mut stdout, &mut stderr);
+            }
+            Err(ReadlineError::Interrupted) => {
+                eprintln!("^C");
+                continue;
+            }
+            Err(ReadlineError::Eof) => {
+                eprintln!("^D");
+                break;
+            }
+            Err(err) => {
+                eprintln!("error: {:?}", err);
+                break;
+            }
         }
+    }
+
+    Ok(())
+}
+
+fn handle_input(
+    line: &str,
+    cmd: &str,
+    paths: &[PathBuf],
+    stdout: &mut Stdout,
+    stderr: &mut Stderr,
+) {
+    let args = line
+        .chars()
+        .skip(cmd.len())
+        .collect::<String>()
+        .trim()
+        .to_owned();
+
+    match cmd.parse::<Command>() {
+        Ok(command) => match command.build(&args) {
+            Ok(command) => command.execute(paths),
+            Err(e) => eprintln!("{e}"),
+        },
+        Err(_) => match executable_find(cmd, paths) {
+            Some(cmd) => executable_invoke(cmd, &args, stdout, stderr),
+            _ => eprintln!("{cmd}: command not found"),
+        },
     }
 }
 
@@ -123,7 +153,7 @@ fn get_command_types(tokens: Vec<String>, paths: &[PathBuf]) {
     })
 }
 
-fn executable_invoke(cmd: PathBuf, args: &str) {
+fn executable_invoke(cmd: PathBuf, args: &str, stdout: &mut Stdout, stderr: &mut Stderr) {
     let args = match shell_words::split(args) {
         Ok(args) => args,
         Err(e) => {
@@ -139,8 +169,8 @@ fn executable_invoke(cmd: PathBuf, args: &str) {
         .output()
         .unwrap();
 
-    io::stdout().write_all(&output.stdout).unwrap();
-    io::stderr().write_all(&output.stderr).unwrap();
+    stdout.write_all(&output.stdout).unwrap();
+    stderr.write_all(&output.stderr).unwrap();
 }
 
 fn executable_find(filename: &str, dirs: &[PathBuf]) -> Option<PathBuf> {
@@ -174,14 +204,8 @@ fn is_executable<P: AsRef<Path>>(path: P) -> bool {
     #[cfg(windows)]
     {
         if let Ok(metadata) = fs::metadata(&path) {
-            return metadata.is_file(); // On Windows, executability check is simplified
+            return metadata.is_file(); // TODO: consider https://docs.rs/is_executable/latest/src/is_executable/lib.rs.html#146
         }
     }
     false
-}
-
-fn input_read(stdin: &io::Stdin) -> String {
-    let mut input = String::new();
-    stdin.read_line(&mut input).unwrap();
-    input.trim().to_owned()
 }
