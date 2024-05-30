@@ -120,7 +120,7 @@ impl Command {
         match self {
             Self::Exit { code } => process::exit(code),
             Self::Echo { message } => println!("{message}"),
-            Self::Type { tokens } => get_command_types(tokens, paths),
+            Self::Type { tokens } => get_command_types(&tokens, paths),
         }
     }
 }
@@ -135,10 +135,10 @@ fn build_command_exit(tokens: &[String]) -> Result<Command, CommandError> {
     }
 }
 
-fn get_command_types(tokens: Vec<String>, paths: &[PathBuf]) {
-    tokens.into_iter().for_each(|t| match t.parse::<Command>() {
+fn get_command_types(tokens: &[String], paths: &[PathBuf]) {
+    tokens.iter().for_each(|t| match t.parse::<Command>() {
         Ok(t) => println!("{} is a shell builtin", t.as_ref()),
-        Err(_) => match executable_find(&t, paths) {
+        Err(_) => match executable_find(t, paths) {
             Some(cmd) => println!(
                 "{t} is {}",
                 cmd.canonicalize().map_or_else(
